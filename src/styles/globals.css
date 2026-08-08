@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/*
+ * Bảng màu chủ đạo "Vibrant Purple/Indigo" — xem quy tắc thiết kế đầy đủ ở README.md (mục 5).
+ * Khai báo dưới dạng CSS theme token (Tailwind v4) để sinh sẵn các class: bg-primary, text-accent,
+ * border-danger, from-primary, ... dùng xuyên suốt toàn bộ dự án, không tự chế màu ngoài bảng này.
+ */
+@theme {
+  --color-primary: #6366f1;
+  --color-primary-dark: #4338ca;
+  --color-secondary: #8b5cf6;
+  --color-accent: #f59e0b;
+  --color-success: #22c55e;
+  --color-danger: #ef4444;
+  --color-surface: #ffffff;
+  --color-bg: #f8fafc;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
