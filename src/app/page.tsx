@@ -217,7 +217,7 @@ export default function HomePage() {
                         type="button"
                         onClick={() => handleSelectTopic(t)}
                         disabled={!t.sellable}
-                        className={`flex min-h-11 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-base transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        className={`flex min-h-11 flex-col items-start gap-1 rounded-xl border px-4 py-3 text-left text-base transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${
                           selectedTopicId === t.id
                             ? "border-primary bg-primary/10 font-semibold text-primary"
                             : "border-slate-200 text-text hover:border-primary/50"
@@ -230,7 +230,7 @@ export default function HomePage() {
                           </span>
                         </span>
                         {t.discountPercent !== null ? (
-                          <span className="flex shrink-0 flex-col items-end leading-tight">
+                          <span className="flex shrink-0 flex-col items-start leading-tight sm:items-end">
                             <span className="text-xs font-normal text-text-muted line-through">
                               {formatPrice(t.price)}
                             </span>
