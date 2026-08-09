@@ -139,7 +139,7 @@ export default function QuizPage() {
   if (loadState === "loading") {
     return (
       <main className="flex flex-1 flex-col items-center justify-center">
-        <p className="text-text-muted">Đang tải câu hỏi...</p>
+        <p className="text-text-muted">Đang tải câu hỏi, chờ xíu nha...</p>
       </main>
     );
   }
@@ -150,8 +150,8 @@ export default function QuizPage() {
         <Card className="w-full">
           <p className="rounded-xl bg-danger/10 px-4 py-3 text-sm font-medium text-danger">
             {loadState === "empty"
-              ? "Chủ đề này chưa có câu hỏi. Vui lòng chọn chủ đề khác."
-              : "Không tải được câu hỏi. Vui lòng thử lại."}
+              ? "Chủ đề này chưa có câu nào hết 😅 Chọn chủ đề khác thử xem!"
+              : "Tải câu hỏi bị lỗi rồi, thử lại nha!"}
           </p>
           <Button variant="ghost" className="mt-4 w-full" onClick={() => router.push("/")}>
             Quay về trang chủ
