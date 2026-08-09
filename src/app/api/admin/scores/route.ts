@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const username = searchParams.get("username");
+  const orderId = searchParams.get("order_id");
 
   let query = supabaseAdmin
     .from("scores")
@@ -22,6 +23,9 @@ export async function GET(request: NextRequest) {
 
   if (username && username.trim()) {
     query = query.ilike("username", `%${username.trim()}%`);
+  }
+  if (orderId) {
+    query = query.eq("order_id", orderId);
   }
 
   const { data, error } = await query.returns<AdminScoreEntry[]>();

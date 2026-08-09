@@ -5,10 +5,12 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { ScoresPanel } from "@/components/admin/ScoresPanel";
 import { QuestionsPanel } from "@/components/admin/QuestionsPanel";
+import { ContentPanel } from "@/components/admin/ContentPanel";
+import { OrdersPanel } from "@/components/admin/OrdersPanel";
 
 const ADMIN_PASSWORD_KEY = "adminPassword";
 
-type Tab = "scores" | "questions";
+type Tab = "scores" | "questions" | "content" | "orders";
 
 async function verifyPassword(candidate: string): Promise<boolean> {
   const res = await fetch("/api/admin/scores", {
@@ -109,6 +111,15 @@ export default function AdminPage() {
       <div className="flex gap-2 border-b border-slate-200">
         <button
           type="button"
+          onClick={() => setActiveTab("content")}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === "content" ? "border-b-2 border-primary text-primary" : "text-text-muted"
+          }`}
+        >
+          Môn học / Chủ đề
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab("scores")}
           className={`px-4 py-2 text-sm font-medium ${
             activeTab === "scores" ? "border-b-2 border-primary text-primary" : "text-text-muted"
@@ -125,9 +136,21 @@ export default function AdminPage() {
         >
           Ngân hàng câu hỏi
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("orders")}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === "orders" ? "border-b-2 border-primary text-primary" : "text-text-muted"
+          }`}
+        >
+          Mua hàng / Doanh thu
+        </button>
       </div>
 
-      {activeTab === "scores" ? <ScoresPanel password={password} /> : <QuestionsPanel password={password} />}
+      {activeTab === "content" && <ContentPanel password={password} />}
+      {activeTab === "scores" && <ScoresPanel password={password} />}
+      {activeTab === "questions" && <QuestionsPanel password={password} />}
+      {activeTab === "orders" && <OrdersPanel password={password} />}
     </main>
   );
 }

@@ -6,51 +6,35 @@ export const dynamic = "force-dynamic";
 
 const VALID_ANSWERS = new Set(["A", "B", "C", "D"]);
 
-interface ValidatedRow {
-  topic: string;
+interface QuestionListItem {
+  id: string;
   question: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  answer: "A" | "B" | "C" | "D";
-  source: string | null;
+  answer: string;
 }
 
-function validateRow(row: unknown, index: number): { row: ValidatedRow } | { error: string } {
-  if (typeof row !== "object" || row === null) {
-    return { error: `Dòng ${index + 1}: dữ liệu không hợp lệ.` };
+export async function GET(request: NextRequest) {
+  const authError = verifyAdminPassword(request);
+  if (authError) return authError;
+
+  const topicId = request.nextUrl.searchParams.get("topic_id");
+  if (!topicId) {
+    return NextResponse.json({ error: "Thiếu topic_id." }, { status: 400 });
   }
 
-  const r = row as Record<string, unknown>;
-  const topic = typeof r.topic === "string" ? r.topic.trim() : "";
-  const question = typeof r.question === "string" ? r.question.trim() : "";
-  const option_a = typeof r.option_a === "string" ? r.option_a.trim() : "";
-  const option_b = typeof r.option_b === "string" ? r.option_b.trim() : "";
-  const option_c = typeof r.option_c === "string" ? r.option_c.trim() : "";
-  const option_d = typeof r.option_d === "string" ? r.option_d.trim() : "";
-  const answer = typeof r.answer === "string" ? r.answer.trim().toUpperCase() : "";
-  const source = typeof r.source === "string" && r.source.trim() ? r.source.trim() : null;
+  // Danh sách rút gọn (không kèm 4 phương án) — tránh tải/hiển thị nặng khi 1 chủ đề
+  // có nhiều câu; xem chi tiết từng câu qua GET /api/admin/questions/[id].
+  const { data, error } = await supabaseAdmin
+    .from("questions")
+    .select("id, question, answer")
+    .eq("topic_id", topicId)
+    .order("created_at", { ascending: true })
+    .returns<QuestionListItem[]>();
 
-  if (!topic || !question || !option_a || !option_b || !option_c || !option_d) {
-    return { error: `Dòng ${index + 1}: thiếu topic/question/phương án.` };
-  }
-  if (!VALID_ANSWERS.has(answer)) {
-    return { error: `Dòng ${index + 1}: answer phải là A/B/C/D.` };
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return {
-    row: {
-      topic,
-      question,
-      option_a,
-      option_b,
-      option_c,
-      option_d,
-      answer: answer as "A" | "B" | "C" | "D",
-      source,
-    },
-  };
+  return NextResponse.json(data);
 }
 
 export async function POST(request: NextRequest) {
@@ -63,61 +47,49 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Body không phải JSON hợp lệ." }, { status: 400 });
   }
-
   if (typeof body !== "object" || body === null) {
     return NextResponse.json({ error: "Body không hợp lệ." }, { status: 400 });
   }
 
-  const { mode, rows } = body as Record<string, unknown>;
+  const { topicId, question, option_a, option_b, option_c, option_d, answer, source } =
+    body as Record<string, unknown>;
 
-  if (mode !== "replace" && mode !== "append") {
-    return NextResponse.json({ error: "mode phải là 'replace' hoặc 'append'." }, { status: 400 });
+  const trimmedTopicId = typeof topicId === "string" ? topicId : "";
+  const trimmedQuestion = typeof question === "string" ? question.trim() : "";
+  const a = typeof option_a === "string" ? option_a.trim() : "";
+  const b = typeof option_b === "string" ? option_b.trim() : "";
+  const c = typeof option_c === "string" ? option_c.trim() : "";
+  const d = typeof option_d === "string" ? option_d.trim() : "";
+  const ans = typeof answer === "string" ? answer.trim().toUpperCase() : "";
+  const safeSource = typeof source === "string" && source.trim() ? source.trim() : null;
+
+  if (!trimmedTopicId || !trimmedQuestion || !a || !b || !c || !d) {
+    return NextResponse.json({ error: "Thiếu topicId/question/phương án." }, { status: 400 });
   }
-  if (!Array.isArray(rows)) {
-    return NextResponse.json({ error: "rows phải là mảng." }, { status: 400 });
-  }
-
-  const validRows: ValidatedRow[] = [];
-  const errors: string[] = [];
-  rows.forEach((row, index) => {
-    const result = validateRow(row, index);
-    if ("error" in result) {
-      errors.push(result.error);
-    } else {
-      validRows.push(result.row);
-    }
-  });
-
-  // Không xoá dữ liệu cũ nếu không có gì hợp lệ để thay thế — tránh xoá sạch ngân
-  // hàng câu hỏi vì lỡ import nhầm file rỗng/sai định dạng.
-  if (mode === "replace" && validRows.length === 0) {
-    return NextResponse.json(
-      {
-        inserted: 0,
-        skipped: errors.length,
-        errors: [...errors, "Không có dòng hợp lệ nào — đã huỷ thao tác thay thế, giữ nguyên dữ liệu cũ."],
-      },
-      { status: 400 },
-    );
+  if (!VALID_ANSWERS.has(ans)) {
+    return NextResponse.json({ error: "answer phải là A/B/C/D." }, { status: 400 });
   }
 
-  if (mode === "replace") {
-    // PostgREST bắt buộc phải có điều kiện lọc khi DELETE — dùng "id is not null"
-    // để khớp toàn bộ dòng (id là uuid PK, không bao giờ null).
-    const { error: deleteError } = await supabaseAdmin.from("questions").delete().not("id", "is", null);
-    if (deleteError) {
-      return NextResponse.json({ error: deleteError.message }, { status: 500 });
-    }
+  const { data, error } = await supabaseAdmin
+    .from("questions")
+    .insert({
+      topic_id: trimmedTopicId,
+      question: trimmedQuestion,
+      option_a: a,
+      option_b: b,
+      option_c: c,
+      option_d: d,
+      answer: ans,
+      source: safeSource,
+    })
+    .select("id, topic_id, question, option_a, option_b, option_c, option_d, answer, source")
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (validRows.length > 0) {
-    const { error: insertError } = await supabaseAdmin.from("questions").insert(validRows);
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
-    }
-  }
-
-  return NextResponse.json({ inserted: validRows.length, skipped: errors.length, errors });
+  return NextResponse.json(data, { status: 201 });
 }
 
 export async function DELETE(request: NextRequest) {

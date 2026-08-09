@@ -144,6 +144,7 @@ Khai báo tại `.env.local.example`, gồm:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ADMIN_PASSWORD`
+- `BANK_BIN`, `BANK_ACCOUNT_NUMBER`, `BANK_ACCOUNT_NAME`, `SEPAY_WEBHOOK_API_KEY` — thanh toán VietQR + SePay, xem hướng dẫn lấy giá trị thật ở mục 9.
 
 Không bao giờ commit file `.env.local` thật lên Git. Copy `.env.local.example` → `.env.local` rồi điền giá trị thật (chưa cần cho tới Step 3, khi bắt đầu gọi Supabase).
 
@@ -176,3 +177,55 @@ Dự án dùng Next.js 16 (mới hơn nhiều so với kiến thức huấn luy�
 - **`next lint` đã bị gỡ bỏ**, dự án dùng thẳng ESLint flat config (`eslint.config.mjs`) — đã cấu hình sẵn ở Step 1, chạy bằng `npx eslint .`, không dùng `next lint`.
 
 Nếu AI thực hiện step sau thấy hành vi khác với hiểu biết cũ về Next.js (13–15), hãy đọc `node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md` trước khi kết luận là lỗi.
+
+---
+
+## 9. Thanh toán VietQR + SePay — cấu hình thật & deploy
+
+> Bổ sung theo `Plan/quiz-web-app-NANG-CAP-PLAN.md` (Step 10 của bản nâng cấp Môn học → Chủ đề, thanh toán theo lượt). Mục này thay thế phần "9 step" nhắc ở mục 1 — bản nâng cấp có **10 step riêng**, xem file plan đó để biết đầy đủ.
+
+### 9.1 Lấy giá trị thật cho 4 biến môi trường thanh toán
+
+| Biến | Cách lấy |
+|---|---|
+| `BANK_BIN` | Mã BIN ngân hàng nhận tiền — tra tại `https://api.vietqr.io/v2/banks` (VD Vietcombank = `970436`). |
+| `BANK_ACCOUNT_NUMBER` | Số tài khoản ngân hàng cá nhân dùng để nhận tiền. |
+| `BANK_ACCOUNT_NAME` | Tên chủ tài khoản, **KHÔNG DẤU**, đúng như trên sổ/app ngân hàng — sẽ hiển thị công khai trên mã QR cho người chơi thấy. |
+| `SEPAY_WEBHOOK_API_KEY` | Trong dashboard SePay (sepay.vn) → mục Webhooks → tạo/mở webhook → copy API Key. |
+
+Khi làm việc cục bộ (dev), file `.env.local` đang có sẵn giá trị **TẠM** (BIN/số tài khoản/tên giả, `SEPAY_WEBHOOK_API_KEY=test-webhook-key-local`) chỉ để test luồng qua API/webhook giả lập — **phải thay bằng giá trị thật** ở đây trước khi dùng thật.
+
+### 9.2 Chuẩn bị SePay
+
+1. Đăng ký tài khoản tại sepay.vn, liên kết **tài khoản ngân hàng cá nhân** (kiểm tra ngân hàng của bạn nằm trong danh sách được hỗ trợ).
+2. Vào mục **Webhooks** trên dashboard SePay → tạo webhook mới, URL trỏ tới:
+   ```
+   https://<domain-đã-deploy>/api/webhooks/sepay
+   ```
+3. Đặt/generate **API Key** cho webhook đó — dùng đúng giá trị này cho `SEPAY_WEBHOOK_API_KEY`.
+4. Sản phẩm/điều kiện của SePay có thể đổi theo thời gian — kiểm tra lại trên sepay.vn khi cấu hình thật.
+
+### 9.3 Cấu hình trên Vercel
+
+1. Vercel Dashboard → chọn project → **Settings → Environment Variables**.
+2. Thêm đủ 4 biến `BANK_BIN`, `BANK_ACCOUNT_NUMBER`, `BANK_ACCOUNT_NAME`, `SEPAY_WEBHOOK_API_KEY` (cùng nhóm với `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_PASSWORD` đã có sẵn) — áp dụng cho môi trường **Production** (và **Preview** nếu bạn test trên preview deployment).
+3. Vào **Deployments** → chọn bản mới nhất → **Redeploy** để biến môi trường mới có hiệu lực (biến môi trường trên Vercel KHÔNG tự áp dụng cho các deployment đã build trước đó).
+
+### 9.4 Kiểm thử đầu-cuối bằng 1 giao dịch nhỏ thật
+
+1. Vào trang chủ đã deploy → chọn môn → chọn 1 chủ đề **có giá** (không phải chủ đề 0đ) → tạo đơn.
+2. Quét mã VietQR hiển thị ở `/pay`, chuyển khoản **đúng số tiền** và **giữ nguyên nội dung (mã đơn)** hiển thị trên màn hình.
+3. Chờ vài giây — trang `/pay` tự poll trạng thái, khi SePay báo webhook thành công sẽ tự chuyển sang nút "Bắt đầu chơi".
+4. Chơi hết 1 lượt → xem `/result` → vào `/admin` → tab **"Mua hàng / Doanh thu"**: phải thấy đúng đơn vừa tạo, đúng số tiền, trạng thái `Đã chơi xong`, có trong tổng doanh thu.
+5. Thử bấm chơi lại chủ đề đó bằng đơn cũ (không tạo đơn mới) — phải bị chặn (vé đã dùng).
+
+### 9.5 Khắc phục sự cố
+
+| Hiện tượng | Nguyên nhân thường gặp | Cách kiểm tra |
+|---|---|---|
+| `/pay` mãi không chuyển sang "Bắt đầu chơi" dù đã chuyển khoản | Webhook SePay chưa gọi tới, hoặc URL webhook sai | Kiểm tra lại URL webhook trên dashboard SePay có đúng `https://<domain>/api/webhooks/sepay`; xem log Vercel (mục dưới) coi request `POST /api/webhooks/sepay` có tới không. |
+| Webhook trả về `401` | `SEPAY_WEBHOOK_API_KEY` trên Vercel không khớp API Key cấu hình bên SePay | So lại giá trị 2 bên; nhớ **Redeploy** sau khi sửa biến môi trường trên Vercel. |
+| Webhook trả `200` nhưng đơn vẫn `pending` | Nội dung chuyển khoản không chứa đúng mã đơn, hoặc số tiền chuyển sai lệch (kể cả 1 đồng) | Xem lại nội dung/số tiền thực nhận trong SMS/app ngân hàng so với mã đơn + số tiền hiển thị ở `/pay`; webhook chỉ khớp khi CẢ HAI đúng. |
+| Đơn kẹt ở `pending` dù chưa/không thanh toán | Bình thường — đơn `pending` quá 15 phút sẽ tự chuyển `expired` khi trang `/pay` poll trạng thái tiếp theo (xem `PENDING_EXPIRY_MINUTES` trong `src/app/api/orders/status/route.ts`) | Vào `/admin` → tab "Mua hàng / Doanh thu", lọc `status=pending` để xem các đơn treo. |
+| Import Excel báo lỗi định dạng | Thiếu sheet `Questions`, sai tên cột, thiếu `subject`/`topic`/`answer` không phải A/B/C/D | Tải lại template mới nhất bằng nút "Tải template Excel" trong `/admin`, đối chiếu đúng tên cột ở dòng 1. |
+| Cần xem log lỗi trên server | — | Vercel Dashboard → project → **Logs** (hoặc `vercel logs <deployment-url>` bằng Vercel CLI) để xem lỗi từ các API route (`/api/orders`, `/api/webhooks/sepay`, `/api/play/start`, ...). |

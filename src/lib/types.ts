@@ -1,3 +1,18 @@
+export interface Subject {
+  id: string;
+  name: string;
+  description: string | null;
+  topicCount: number;
+}
+
+export interface Topic {
+  id: string;
+  name: string;
+  price: number | null;
+  questionCount: number;
+  sellable: boolean;
+}
+
 export interface Question {
   id: string;
   topic: string;
@@ -26,6 +41,9 @@ export interface WrongDetail {
 export interface QuizResult {
   username: string;
   topic: string;
+  topicId: string;
+  orderId: string;
+  memoCode: string;
   score: number;
   correct_count: number;
   wrong_count: number;

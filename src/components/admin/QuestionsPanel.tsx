@@ -2,42 +2,69 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "@/components/Button";
-import type { TopicCount } from "@/lib/types";
+import { ManualQuestionsPanel } from "@/components/admin/ManualQuestionsPanel";
 import { downloadTemplate, parseQuestionsSheet, validateImportRow, type ValidImportRow } from "@/lib/excelQuestions";
 
+interface SubjectSummary {
+  id: string;
+  name: string;
+}
+
+interface TopicSummary {
+  id: string;
+  subjectId: string;
+  name: string;
+  questionCount: number;
+}
+
 type ImportMode = "replace" | "append";
-type TopicsLoadState = "loading" | "ready" | "error";
+type SummaryLoadState = "loading" | "ready" | "error";
 type ImportState = "idle" | "importing" | "done" | "error";
 
+interface ImportResult {
+  insertedQuestions: number;
+  createdSubjects: number;
+  createdTopics: number;
+  skipped: number;
+}
+
 export function QuestionsPanel({ password }: { password: string }) {
-  const [topics, setTopics] = useState<TopicCount[]>([]);
-  const [topicsLoadState, setTopicsLoadState] = useState<TopicsLoadState>("loading");
+  const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
+  const [topics, setTopics] = useState<TopicSummary[]>([]);
+  const [summaryState, setSummaryState] = useState<SummaryLoadState>("loading");
+
   const [previewRows, setPreviewRows] = useState<ValidImportRow[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [mode, setMode] = useState<ImportMode>("append");
-  const [importResult, setImportResult] = useState<{ inserted: number; skipped: number } | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importState, setImportState] = useState<ImportState>("idle");
   const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function loadTopics() {
+  async function loadSummary() {
     try {
-      const res = await fetch("/api/topics");
-      if (!res.ok) throw new Error("failed to load topics");
-      const data: TopicCount[] = await res.json();
-      setTopics(data);
-      setTopicsLoadState("ready");
+      const [subjectsRes, topicsRes] = await Promise.all([
+        fetch("/api/admin/subjects", { headers: { "x-admin-password": password } }),
+        fetch("/api/admin/topics", { headers: { "x-admin-password": password } }),
+      ]);
+      if (!subjectsRes.ok || !topicsRes.ok) throw new Error("failed to load summary");
+      const subjectsData: SubjectSummary[] = await subjectsRes.json();
+      const topicsData: TopicSummary[] = await topicsRes.json();
+      setSubjects(subjectsData);
+      setTopics(topicsData);
+      setSummaryState("ready");
     } catch {
-      setTopicsLoadState("error");
+      setSummaryState("error");
     }
   }
 
   useEffect(() => {
-    // `loadTopics` chỉ setState sau khi `await fetch(...)` xong (không đồng bộ) — an
+    // `loadSummary` chỉ setState sau khi `await fetch(...)` xong (không đồng bộ) — an
     // toàn để gọi khi mount, nhưng lint không lần theo được thân hàm khai báo ngoài effect.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadTopics();
+    loadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -71,7 +98,7 @@ export function QuestionsPanel({ password }: { password: string }) {
 
     setImportState("importing");
     try {
-      const res = await fetch("/api/admin/questions", {
+      const res = await fetch("/api/admin/questions/import", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-admin-password": password },
         body: JSON.stringify({ mode, rows: previewRows }),
@@ -84,12 +111,17 @@ export function QuestionsPanel({ password }: { password: string }) {
         return;
       }
 
-      setImportResult({ inserted: data.inserted, skipped: data.skipped });
+      setImportResult({
+        insertedQuestions: data.insertedQuestions,
+        createdSubjects: data.createdSubjects,
+        createdTopics: data.createdTopics,
+        skipped: data.skipped,
+      });
       setImportState("done");
       setPreviewRows([]);
       setFileName(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      loadTopics();
+      loadSummary();
     } catch {
       setImportState("error");
       setImportErrors((prev) => [...prev, "Không kết nối được tới server."]);
@@ -106,22 +138,23 @@ export function QuestionsPanel({ password }: { password: string }) {
         method: "DELETE",
         headers: { "x-admin-password": password },
       });
-      if (res.ok) await loadTopics();
+      if (res.ok) await loadSummary();
     } finally {
       setDeleting(false);
     }
   }
 
-  const totalQuestions = topics.reduce((sum, t) => sum + t.count, 0);
+  const totalQuestions = topics.reduce((sum, t) => sum + t.questionCount, 0);
+  const subjectNameById = new Map(subjects.map((s) => [s.id, s.name]));
 
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-2xl bg-surface p-6 shadow-xl">
         <h2 className="mb-3 text-lg font-semibold text-text">Số câu hiện có</h2>
 
-        {topicsLoadState === "loading" ? (
+        {summaryState === "loading" ? (
           <p className="text-text-muted">Đang tải...</p>
-        ) : topicsLoadState === "error" ? (
+        ) : summaryState === "error" ? (
           <p className="text-danger">Không tải được.</p>
         ) : topics.length === 0 ? (
           <p className="text-text-muted">Chưa có câu hỏi nào trong ngân hàng.</p>
@@ -130,11 +163,13 @@ export function QuestionsPanel({ password }: { password: string }) {
             <li className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
               Tổng: {totalQuestions} câu
             </li>
-            {topics.map((t) => (
-              <li key={t.topic} className="rounded-full bg-slate-100 px-3 py-1 text-text-muted">
-                {t.topic}: {t.count}
-              </li>
-            ))}
+            {topics
+              .filter((t) => t.questionCount > 0)
+              .map((t) => (
+                <li key={t.id} className="rounded-full bg-slate-100 px-3 py-1 text-text-muted">
+                  {subjectNameById.get(t.subjectId) ?? "?"} · {t.name}: {t.questionCount}
+                </li>
+              ))}
           </ul>
         )}
 
@@ -147,6 +182,8 @@ export function QuestionsPanel({ password }: { password: string }) {
           {deleting ? "Đang xoá..." : "Xoá toàn bộ ngân hàng"}
         </Button>
       </div>
+
+      <ManualQuestionsPanel password={password} onQuestionCountChanged={loadSummary} />
 
       <div className="rounded-2xl bg-surface p-6 shadow-xl">
         <h2 className="mb-3 text-lg font-semibold text-text">Import câu hỏi từ Excel</h2>
@@ -181,9 +218,10 @@ export function QuestionsPanel({ password }: { password: string }) {
           <>
             <p className="mb-2 text-sm text-text-muted">Xem trước {previewRows.length} câu hợp lệ:</p>
             <div className="mb-4 max-h-64 overflow-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[520px] text-left text-xs">
+              <table className="w-full min-w-140 text-left text-xs">
                 <thead className="bg-primary/5 text-text-muted">
                   <tr>
+                    <th className="px-3 py-2">Môn</th>
                     <th className="px-3 py-2">Chủ đề</th>
                     <th className="px-3 py-2">Câu hỏi</th>
                     <th className="px-3 py-2">Đáp án</th>
@@ -192,6 +230,7 @@ export function QuestionsPanel({ password }: { password: string }) {
                 <tbody>
                   {previewRows.slice(0, 50).map((row, i) => (
                     <tr key={i} className="border-t border-slate-100">
+                      <td className="px-3 py-2">{row.subject}</td>
                       <td className="px-3 py-2">{row.topic}</td>
                       <td className="px-3 py-2">{row.question}</td>
                       <td className="px-3 py-2 font-medium text-success">{row.answer}</td>
@@ -229,9 +268,19 @@ export function QuestionsPanel({ password }: { password: string }) {
         )}
 
         {importResult && (
-          <p className="mt-4 rounded-xl bg-success/10 px-4 py-3 text-sm text-success">
-            Đã thêm {importResult.inserted} câu, bỏ qua {importResult.skipped} câu lỗi.
-          </p>
+          <div className="mt-4 rounded-xl bg-success/10 px-4 py-3 text-sm text-success">
+            <p>
+              Đã thêm {importResult.insertedQuestions} câu, bỏ qua {importResult.skipped} câu lỗi.
+              {importResult.createdSubjects > 0 && ` Tạo mới ${importResult.createdSubjects} môn.`}
+              {importResult.createdTopics > 0 && ` Tạo mới ${importResult.createdTopics} chủ đề.`}
+            </p>
+            {importResult.createdTopics > 0 && (
+              <p className="mt-1 font-medium">
+                ⚠️ {importResult.createdTopics} chủ đề mới đang &quot;chưa định giá&quot; — vào tab &quot;Môn học /
+                Chủ đề&quot; để đặt giá trước khi mở bán.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>

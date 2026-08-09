@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 
 const CANONICAL_HEADERS = [
+  "subject",
   "topic",
   "question",
   "option_a",
@@ -12,6 +13,7 @@ const CANONICAL_HEADERS = [
 ] as const;
 
 export interface RawImportRow {
+  subject: string;
   topic: string;
   question: string;
   option_a: string;
@@ -23,6 +25,7 @@ export interface RawImportRow {
 }
 
 export interface ValidImportRow {
+  subject: string;
   topic: string;
   question: string;
   option_a: string;
@@ -69,6 +72,7 @@ export function validateImportRow(
   row: RawImportRow,
   index: number,
 ): { data: ValidImportRow } | { error: string } {
+  const subject = row.subject.trim();
   const topic = row.topic.trim();
   const question = row.question.trim();
   const option_a = row.option_a.trim();
@@ -80,8 +84,8 @@ export function validateImportRow(
 
   const rowNumber = index + 2; // dòng 1 là header, dữ liệu bắt đầu từ dòng 2
 
-  if (!topic || !question || !option_a || !option_b || !option_c || !option_d) {
-    return { error: `Dòng ${rowNumber}: thiếu topic/question/phương án.` };
+  if (!subject || !topic || !question || !option_a || !option_b || !option_c || !option_d) {
+    return { error: `Dòng ${rowNumber}: thiếu subject/topic/question/phương án.` };
   }
   if (!["A", "B", "C", "D"].includes(answer)) {
     return { error: `Dòng ${rowNumber}: answer phải là A/B/C/D (đang là "${row.answer}").` };
@@ -89,6 +93,7 @@ export function validateImportRow(
 
   return {
     data: {
+      subject,
       topic,
       question,
       option_a,
@@ -106,9 +111,9 @@ export function downloadTemplate() {
   const wb = XLSX.utils.book_new();
 
   const questionsData = [
-    ["topic", "question", "option_a", "option_b", "option_c", "option_d", "answer", "source"],
-    ["Toán lớp 1", "1 + 1 = ?", "1", "2", "3", "4", "B", "Phép cộng cơ bản"],
-    ["Toán lớp 1", "2 + 2 = ?", "3", "4", "5", "6", "B", ""],
+    ["subject", "topic", "question", "option_a", "option_b", "option_c", "option_d", "answer", "source"],
+    ["Toán", "Toán lớp 1", "1 + 1 = ?", "1", "2", "3", "4", "B", "Phép cộng cơ bản"],
+    ["Toán", "Toán lớp 1", "2 + 2 = ?", "3", "4", "5", "6", "B", ""],
   ];
   const questionsSheet = XLSX.utils.aoa_to_sheet(questionsData);
   XLSX.utils.book_append_sheet(wb, questionsSheet, "Questions");
@@ -117,7 +122,8 @@ export function downloadTemplate() {
     ["Hướng dẫn điền file câu hỏi"],
     [],
     ["Cột", "Bắt buộc", "Ý nghĩa"],
-    ["topic", "Có", "Tên chủ đề/môn học (VD: Toán lớp 1)"],
+    ["subject", "Có", "Tên môn học (VD: Toán)"],
+    ["topic", "Có", "Tên chủ đề thuộc môn ở trên (VD: Toán lớp 1)"],
     ["question", "Có", "Nội dung câu hỏi"],
     ["option_a", "Có", "Phương án A"],
     ["option_b", "Có", "Phương án B"],
@@ -128,7 +134,9 @@ export function downloadTemplate() {
     [],
     ["Lưu ý:"],
     ["- Không đổi tên dòng tiêu đề (dòng 1) ở sheet Questions."],
-    ["- Không để trống topic/question/option_a..d/answer."],
+    ["- Mỗi dòng là 1 câu hỏi. Không để trống subject/topic/question/option_a..d/answer."],
+    ["- Môn/chủ đề chưa có sẽ được TỰ TẠO khi import. Chủ đề mới tạo sẽ ở trạng thái"],
+    ["  \"chưa định giá\" — vào /admin mục Môn học/Chủ đề để đặt giá trước khi mở bán."],
     ["- Có thể xoá 2 dòng ví dụ trước khi điền câu hỏi thật."],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet(guideData);
