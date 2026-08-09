@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { computeFinalPrice, isDiscountActive } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ interface TopicRow {
   id: string;
   price: number | null;
   is_active: boolean;
+  discount_percent: number | null;
+  discount_starts_at: string | null;
+  discount_ends_at: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -50,7 +54,7 @@ export async function POST(request: NextRequest) {
 
   const { data: topic, error: topicError } = await supabaseAdmin
     .from("topics")
-    .select("id, price, is_active")
+    .select("id, price, is_active, discount_percent, discount_starts_at, discount_ends_at")
     .eq("id", topicId)
     .maybeSingle<TopicRow>();
 
@@ -76,8 +80,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Chủ đề chưa có câu hỏi." }, { status: 400 });
   }
 
-  const amount = topic.price;
-  // Chủ đề miễn phí: tạo đơn ở trạng thái 'paid' luôn, bỏ qua bước chờ chuyển khoản.
+  // Áp giảm giá nếu đang trong khoảng thời gian admin đặt — số tiền THỰC THU tính ở
+  // đây và đóng băng vào order.amount, không đổi theo dù sau đó giảm giá hết hạn/đổi.
+  const discountActive = isDiscountActive({
+    discountPercent: topic.discount_percent,
+    discountStartsAt: topic.discount_starts_at,
+    discountEndsAt: topic.discount_ends_at,
+  });
+  const amount = computeFinalPrice(topic.price, discountActive ? topic.discount_percent : null);
+  // Chủ đề miễn phí (hoặc giảm giá về 0đ): tạo đơn ở trạng thái 'paid' luôn, bỏ qua chờ chuyển khoản.
   const isFree = amount === 0;
   const now = new Date().toISOString();
 

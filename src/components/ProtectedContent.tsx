@@ -26,11 +26,34 @@ function formatTimestamp(date: Date): string {
 export function ProtectedContent({ username, code, children }: ProtectedContentProps) {
   const [now, setNow] = useState(() => new Date());
   const [hidden, setHidden] = useState(false);
+  // Mặc định BẬT trong lúc chờ tải cài đặt — an toàn hơn là mặc định tắt bảo vệ.
+  const [watermarkEnabled, setWatermarkEnabled] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings() {
+      try {
+        const res = await fetch("/api/settings");
+        if (!res.ok) return;
+        const data: { watermarkEnabled: boolean } = await res.json();
+        if (!cancelled) setWatermarkEnabled(data.watermarkEnabled);
+      } catch {
+        // Tải cài đặt lỗi thì giữ nguyên mặc định (đang bật) — không hạ bảo vệ vì lỗi mạng.
+      }
+    }
+
+    loadSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!watermarkEnabled) return;
     const interval = setInterval(() => setNow(new Date()), WATERMARK_UPDATE_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, []);
+  }, [watermarkEnabled]);
 
   useEffect(() => {
     function handleContextMenu(e: MouseEvent) {
@@ -86,21 +109,26 @@ export function ProtectedContent({ username, code, children }: ProtectedContentP
     <div style={{ userSelect: "none" }} onDragStart={(e) => e.preventDefault()}>
       {children}
 
-      {/* Watermark động: lặp chéo khắp màn hình, pointer-events:none để không cản thao
-          tác chơi. Đè lên toàn bộ viewport (fixed) nên vẫn phủ khi nội dung dài/cuộn. */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
-        <div className="absolute left-1/2 top-1/2 flex w-[160vw] -translate-x-1/2 -translate-y-1/2 rotate-[-24deg] flex-wrap gap-x-10 gap-y-8 opacity-[0.08]">
-          {Array.from({ length: WATERMARK_TILE_COUNT }).map((_, i) => (
-            <span key={i} className="whitespace-nowrap text-xs font-semibold text-slate-900">
-              {watermarkText}
-            </span>
-          ))}
-        </div>
-      </div>
+      {watermarkEnabled && (
+        <>
+          {/* Watermark động: lặp chéo khắp màn hình, pointer-events:none để không cản
+              thao tác chơi. Đè lên toàn bộ viewport (fixed) nên vẫn phủ khi nội dung
+              dài/cuộn. */}
+          <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
+            <div className="absolute left-1/2 top-1/2 flex w-[160vw] -translate-x-1/2 -translate-y-1/2 rotate-[-24deg] flex-wrap gap-x-10 gap-y-8 opacity-[0.08]">
+              {Array.from({ length: WATERMARK_TILE_COUNT }).map((_, i) => (
+                <span key={i} className="whitespace-nowrap text-xs font-semibold text-slate-900">
+                  {watermarkText}
+                </span>
+              ))}
+            </div>
+          </div>
 
-      <div className="pointer-events-none fixed bottom-2 left-1/2 z-30 -translate-x-1/2 rounded-full bg-slate-900/70 px-3 py-1 text-center text-[11px] text-white/80">
-        Nội dung có đóng dấu định danh, không chia sẻ ra ngoài.
-      </div>
+          <div className="pointer-events-none fixed bottom-2 left-1/2 z-30 -translate-x-1/2 rounded-full bg-slate-900/70 px-3 py-1 text-center text-[11px] text-white/80">
+            Nội dung có đóng dấu định danh, không chia sẻ ra ngoài.
+          </div>
+        </>
+      )}
 
       {hidden && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/95 px-6 text-center text-white">

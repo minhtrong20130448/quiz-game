@@ -24,8 +24,11 @@ export default function HomePage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [subjectsState, setSubjectsState] = useState<SubjectsLoadState>("loading");
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [subjectsState, setSubjectsState] =
+    useState<SubjectsLoadState>("loading");
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
+    null,
+  );
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicsState, setTopicsState] = useState<TopicsLoadState>("idle");
@@ -144,7 +147,10 @@ export default function HomePage() {
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
-              <label htmlFor="username" className="text-sm font-medium text-text">
+              <label
+                htmlFor="username"
+                className="text-sm font-medium text-text"
+              >
                 Tên của bạn
               </label>
               <input
@@ -160,7 +166,9 @@ export default function HomePage() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium text-text">Chọn môn học</span>
+              <span className="text-sm font-medium text-text">
+                Chọn môn học
+              </span>
               {isLoadingSubjects ? (
                 <p className="text-sm text-text-muted">Đang tải...</p>
               ) : (
@@ -188,13 +196,19 @@ export default function HomePage() {
 
             {selectedSubjectId && (
               <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-text">Chọn chủ đề</span>
+                <span className="text-sm font-medium text-text">
+                  Chọn chủ đề
+                </span>
                 {topicsState === "loading" ? (
                   <p className="text-sm text-text-muted">Đang tải...</p>
                 ) : topicsState === "error" ? (
-                  <p className="text-sm text-danger">Không tải được chủ đề, thử lại nha!</p>
+                  <p className="text-sm text-danger">
+                    Không tải được chủ đề, thử lại nha!
+                  </p>
                 ) : topics.length === 0 ? (
-                  <p className="text-sm text-text-muted">Môn này chưa có chủ đề nào.</p>
+                  <p className="text-sm text-text-muted">
+                    Môn này chưa có chủ đề nào.
+                  </p>
                 ) : (
                   <div className="flex flex-col gap-2">
                     {topics.map((t) => (
@@ -215,17 +229,29 @@ export default function HomePage() {
                             ({t.questionCount} câu)
                           </span>
                         </span>
-                        <span
-                          className={`shrink-0 text-sm font-semibold ${
-                            !t.sellable
-                              ? "text-text-muted"
-                              : t.price === 0
-                                ? "text-secondary"
-                                : "text-primary"
-                          }`}
-                        >
-                          {formatPrice(t.price)}
-                        </span>
+                        {t.discountPercent !== null ? (
+                          <span className="flex shrink-0 flex-col items-end leading-tight">
+                            <span className="text-xs font-normal text-text-muted line-through">
+                              {formatPrice(t.price)}
+                            </span>
+                            <span className="text-sm font-semibold text-danger">
+                              {formatPrice(t.finalPrice)}{" "}
+                              <span className="text-xs">(-{t.discountPercent}%)</span>
+                            </span>
+                          </span>
+                        ) : (
+                          <span
+                            className={`shrink-0 text-sm font-semibold ${
+                              !t.sellable
+                                ? "text-text-muted"
+                                : t.price === 0
+                                  ? "text-secondary"
+                                  : "text-primary"
+                            }`}
+                          >
+                            {formatPrice(t.price)}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -235,16 +261,22 @@ export default function HomePage() {
 
             {formError && <p className="text-sm text-danger">{formError}</p>}
 
-            <Button type="submit" disabled={isLoadingSubjects} className="w-full">
-              {selectedTopic?.price === 0 ? "Chơi miễn phí ngay!" : "Tiếp tục thanh toán"}
+            <Button
+              type="submit"
+              disabled={isLoadingSubjects}
+              className="w-full"
+            >
+              {selectedTopic?.finalPrice === 0
+                ? "Chơi miễn phí ngay!"
+                : "Tiếp tục thanh toán"}
             </Button>
           </form>
         )}
       </Card>
 
-      <Link href="/leaderboard" className="text-sm font-medium text-primary hover:underline">
+      {/* <Link href="/leaderboard" className="text-sm font-medium text-primary hover:underline">
         Xem bảng xếp hạng →
-      </Link>
+      </Link> */}
     </main>
   );
 }

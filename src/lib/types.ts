@@ -9,6 +9,10 @@ export interface Topic {
   id: string;
   name: string;
   price: number | null;
+  /** Giá thực tế phải trả ngay lúc này (đã áp giảm giá nếu đang trong khoảng áp dụng). */
+  finalPrice: number | null;
+  /** % đang giảm — chỉ khác null khi giảm giá ĐANG hiệu lực (không phải giảm giá đã đặt nhưng chưa/hết hạn). */
+  discountPercent: number | null;
   questionCount: number;
   sellable: boolean;
 }

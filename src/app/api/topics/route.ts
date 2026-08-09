@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { computeFinalPrice, isDiscountActive } from "@/lib/pricing";
 import type { Topic } from "@/lib/types";
 
 // Dữ liệu đổi bất cứ lúc nào admin sửa chủ đề (Step 7) — không cho Next cache tĩnh.
@@ -10,6 +11,9 @@ interface TopicRow {
   name: string;
   price: number | null;
   is_active: boolean;
+  discount_percent: number | null;
+  discount_starts_at: string | null;
+  discount_ends_at: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -22,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   const { data: topics, error: topicsError } = await supabaseAdmin
     .from("topics")
-    .select("id, name, price, is_active")
+    .select("id, name, price, is_active, discount_percent, discount_starts_at, discount_ends_at")
     .eq("subject_id", subjectId)
     .returns<TopicRow[]>();
 
@@ -49,13 +53,22 @@ export async function GET(request: NextRequest) {
     questionCountByTopic.set(q.topic_id, (questionCountByTopic.get(q.topic_id) ?? 0) + 1);
   }
 
+  const now = new Date();
   const result: Topic[] = topics
     .map((t) => {
       const questionCount = questionCountByTopic.get(t.id) ?? 0;
+      const discount = {
+        discountPercent: t.discount_percent,
+        discountStartsAt: t.discount_starts_at,
+        discountEndsAt: t.discount_ends_at,
+      };
+      const active = t.price !== null && isDiscountActive(discount, now);
       return {
         id: t.id,
         name: t.name,
         price: t.price,
+        finalPrice: t.price === null ? null : computeFinalPrice(t.price, active ? t.discount_percent : null),
+        discountPercent: active ? t.discount_percent : null,
         questionCount,
         // price=0 vẫn "đã định giá" (miễn phí); price=null nghĩa là "Sắp có".
         sellable: t.is_active && t.price !== null && questionCount > 0,

@@ -81,11 +81,12 @@ export default function QuizPage() {
     const safeOrderId: string = storedOrderId;
     orderIdRef.current = safeOrderId;
 
-    // React chạy effect 2 lần ở dev (StrictMode) — tránh gọi /api/play/start 2 lần.
+    // React chạy effect 2 lần ở dev (StrictMode) — startedRef đảm bảo /api/play/start
+    // chỉ gọi đúng 1 lần. KHÔNG dùng thêm cờ "cancelled" kiểu cleanup ở đây: cleanup của
+    // lần chạy đầu (ảo, do StrictMode) sẽ chạy trước khi fetch thật xong, làm kết quả
+    // fetch bị coi là "đã huỷ" và loadState kẹt mãi ở "loading" (đã từng xảy ra bug này).
     if (startedRef.current) return;
     startedRef.current = true;
-
-    let cancelled = false;
 
     async function startPlay() {
       setUsername(safeUsername);
@@ -98,7 +99,6 @@ export default function QuizPage() {
           body: JSON.stringify({ orderId: safeOrderId }),
         });
         const data = await res.json();
-        if (cancelled) return;
 
         if (res.status === 403) {
           setErrorMessage(data.error ?? "Vé đã dùng hoặc không hợp lệ.");
@@ -112,14 +112,11 @@ export default function QuizPage() {
         setQuestions(buildShuffledQuestions(data.questions));
         setLoadState("ready");
       } catch {
-        if (!cancelled) setLoadState("error");
+        setLoadState("error");
       }
     }
 
     startPlay();
-    return () => {
-      cancelled = true;
-    };
   }, [router]);
 
   function handleSelect(currentQuestion: ShuffledQuestion, index: number) {
@@ -201,7 +198,7 @@ export default function QuizPage() {
 
   return (
     <ProtectedContent username={username} code={memoCode}>
-      <main className="flex flex-1 flex-col gap-4 py-4">
+      <main className={`flex flex-1 flex-col gap-4 py-4 ${hasAnswered ? "pb-24 lg:pb-4" : ""}`}>
         <div className="flex items-center justify-between text-sm font-medium">
           <span className="text-text-muted">
             Câu {currentIndex + 1}/{questions.length}
@@ -238,9 +235,15 @@ export default function QuizPage() {
         </div>
 
         {hasAnswered && (
-          <Button className="w-full" onClick={() => handleNext(isLastQuestion)}>
-            {isLastQuestion ? "Xem kết quả" : "Câu tiếp theo"}
-          </Button>
+          // Mobile/tablet (< lg): cố định gần đáy màn hình để không bị khuất khi nội dung
+          // câu hỏi dài phải cuộn. Từ lg trở lên: quay lại nằm trong luồng như bình thường.
+          <div className="fixed inset-x-0 bottom-0 z-45 border-t border-slate-200 bg-bg/95 p-4 backdrop-blur-sm lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+            <div className="mx-auto max-w-2xl">
+              <Button className="w-full" onClick={() => handleNext(isLastQuestion)}>
+                {isLastQuestion ? "Xem kết quả" : "Câu tiếp theo"}
+              </Button>
+            </div>
+          </div>
         )}
       </main>
     </ProtectedContent>

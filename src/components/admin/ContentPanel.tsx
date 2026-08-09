@@ -15,6 +15,11 @@ interface AdminTopic {
   subjectId: string;
   name: string;
   price: number | null;
+  finalPrice: number | null;
+  discountPercent: number | null;
+  discountStartsAt: string | null;
+  discountEndsAt: string | null;
+  discountActive: boolean;
   isActive: boolean;
   questionCount: number;
 }
@@ -25,6 +30,26 @@ function formatPrice(price: number | null): string {
   if (price === null) return "Chưa định giá";
   if (price === 0) return "Miễn phí";
   return `${price.toLocaleString("vi-VN")}đ`;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "?";
+  return new Date(iso).toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Chuyển ISO (UTC) sang giá trị cho <input type="datetime-local"> (giờ địa phương). */
+function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function ContentPanel({ password }: { password: string }) {
@@ -51,6 +76,12 @@ export function ContentPanel({ password }: { password: string }) {
   const [editTopicName, setEditTopicName] = useState("");
   const [editTopicPrice, setEditTopicPrice] = useState("");
   const [editTopicActive, setEditTopicActive] = useState(true);
+
+  const [discountEditingTopicId, setDiscountEditingTopicId] = useState<string | null>(null);
+  const [discountPercentInput, setDiscountPercentInput] = useState("");
+  const [discountStartInput, setDiscountStartInput] = useState("");
+  const [discountEndInput, setDiscountEndInput] = useState("");
+  const [savingDiscount, setSavingDiscount] = useState(false);
 
   async function load() {
     try {
@@ -257,6 +288,62 @@ export function ContentPanel({ password }: { password: string }) {
     }
   }
 
+  function startEditDiscount(topic: AdminTopic) {
+    setDiscountEditingTopicId(topic.id);
+    setDiscountPercentInput(topic.discountPercent === null ? "" : String(topic.discountPercent));
+    setDiscountStartInput(toDatetimeLocalValue(topic.discountStartsAt));
+    setDiscountEndInput(toDatetimeLocalValue(topic.discountEndsAt));
+  }
+
+  async function handleSaveDiscount(topicId: string) {
+    const trimmedPercent = discountPercentInput.trim();
+    // Để trống % rồi Lưu = xoá giảm giá.
+    let payload: Record<string, unknown>;
+
+    if (!trimmedPercent) {
+      payload = { discountPercent: null, discountStartsAt: null, discountEndsAt: null };
+    } else {
+      const percent = Number(trimmedPercent);
+      if (!Number.isInteger(percent) || percent <= 0 || percent > 100) {
+        setActionError("% giảm giá phải là số nguyên 1-100.");
+        return;
+      }
+      if (!discountStartInput || !discountEndInput) {
+        setActionError("Cần chọn đủ ngày bắt đầu và ngày kết thúc giảm giá.");
+        return;
+      }
+      const start = new Date(discountStartInput);
+      const end = new Date(discountEndInput);
+      if (start.getTime() > end.getTime()) {
+        setActionError("Ngày bắt đầu giảm giá phải trước hoặc bằng ngày kết thúc.");
+        return;
+      }
+      payload = {
+        discountPercent: percent,
+        discountStartsAt: start.toISOString(),
+        discountEndsAt: end.toISOString(),
+      };
+    }
+
+    setSavingDiscount(true);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/admin/topics", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": password },
+        body: JSON.stringify({ id: topicId, ...payload }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Không lưu được giảm giá.");
+      setDiscountEditingTopicId(null);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Không lưu được giảm giá.");
+    } finally {
+      setSavingDiscount(false);
+    }
+  }
+
   if (loadState === "loading") {
     return <p className="p-6 text-center text-text-muted">Đang tải...</p>;
   }
@@ -390,6 +477,50 @@ export function ContentPanel({ password }: { password: string }) {
                               </Button>
                             </div>
                           </div>
+                        ) : discountEditingTopicId === topic.id ? (
+                          <div className="flex flex-1 flex-col gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <input
+                                value={discountPercentInput}
+                                onChange={(e) => setDiscountPercentInput(e.target.value)}
+                                placeholder="% giảm (để trống = xoá giảm giá)"
+                                inputMode="numeric"
+                                className="min-h-11 w-56 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                              />
+                              <label className="flex shrink-0 items-center gap-2 text-sm text-text-muted">
+                                Từ
+                                <input
+                                  type="datetime-local"
+                                  value={discountStartInput}
+                                  onChange={(e) => setDiscountStartInput(e.target.value)}
+                                  className="min-h-11 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                                />
+                              </label>
+                              <label className="flex shrink-0 items-center gap-2 text-sm text-text-muted">
+                                Đến
+                                <input
+                                  type="datetime-local"
+                                  value={discountEndInput}
+                                  onChange={(e) => setDiscountEndInput(e.target.value)}
+                                  className="min-h-11 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                                />
+                              </label>
+                            </div>
+                            <p className="text-xs text-text-muted">Để trống ô % rồi bấm Lưu để xoá giảm giá.</p>
+                            <div className="flex shrink-0 gap-2">
+                              <Button type="button" onClick={() => handleSaveDiscount(topic.id)} disabled={savingDiscount}>
+                                {savingDiscount ? "Đang lưu..." : "Lưu giảm giá"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setDiscountEditingTopicId(null)}
+                                disabled={savingDiscount}
+                              >
+                                Huỷ
+                              </Button>
+                            </div>
+                          </div>
                         ) : (
                           <>
                             <div>
@@ -409,7 +540,14 @@ export function ContentPanel({ password }: { password: string }) {
                                         : "bg-primary/10 text-primary"
                                   }`}
                                 >
-                                  {formatPrice(topic.price)}
+                                  {topic.discountActive ? (
+                                    <>
+                                      <span className="line-through opacity-60">{formatPrice(topic.price)}</span>{" "}
+                                      {formatPrice(topic.finalPrice)}
+                                    </>
+                                  ) : (
+                                    formatPrice(topic.price)
+                                  )}
                                 </span>
                                 <span
                                   className={`rounded-full px-2 py-0.5 font-medium ${
@@ -418,12 +556,27 @@ export function ContentPanel({ password }: { password: string }) {
                                 >
                                   {topic.isActive ? "Đang mở bán" : "Đã tắt"}
                                 </span>
+                                {topic.discountPercent !== null && (
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 font-medium ${
+                                      topic.discountActive ? "bg-danger/10 text-danger" : "bg-slate-100 text-text-muted"
+                                    }`}
+                                  >
+                                    {topic.discountActive ? "Đang" : "Đã đặt"} giảm {topic.discountPercent}% (
+                                    {formatDate(topic.discountStartsAt)} → {formatDate(topic.discountEndsAt)})
+                                  </span>
+                                )}
                               </div>
                             </div>
                             <div className="flex shrink-0 gap-2">
                               <Button variant="ghost" onClick={() => startEditTopic(topic)}>
                                 Sửa
                               </Button>
+                              {topic.price !== null && (
+                                <Button variant="ghost" onClick={() => startEditDiscount(topic)}>
+                                  Giảm giá
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 className="text-danger hover:bg-danger/10"
